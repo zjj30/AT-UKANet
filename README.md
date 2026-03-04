@@ -3,14 +3,13 @@
 ### 🔍 项目目标
 
 本项目最终提出的主模型为 **AT-UKanNet**，用于医学图像分割等场景，通过在 UKAN 主干上引入
-**ATConv** 与 **并行 CASA 注意力（Channel & Spatial Attention）**，增强全局上下文建模能力。
+**ATConv** 与 **PCSA**，增强全局上下文建模能力。
 
 - **主干网络**: UKAN
-- **卷积增强 (ATConv)**: 在编码器/解码器部分层替换标准卷积，提升非线性表达和上下文建模能力
-- **注意力模块 (CASA)**: 基于 CBAM 思路实现的通道注意力 + 空间注意力，其中推荐方案为 **并行 CASA**
+- **注意力卷积模型 (ATConv)**: 在编码器/解码器部分层替换标准卷积，提升非线性表达和上下文建模能力
+- **并行通道与空间注意力模块 (PCSA)**: 基于 CBAM 思路实现的通道注意力 + 空间注意力，其中推荐方案为 **PCSA**
 - **可选损失增强**: 保留 PFAN 风格边界保持损失（Edge Preservation Loss）作为历史对比实验，默认关闭
 
-> 说明：ARConv 与 PFAN 注意力在本项目中的效果一般，已作为**历史方案**保留，仅用于 ablation / 对比，不再作为最终推荐模块。
 
 ---
 
@@ -31,7 +30,7 @@ pip install -r requirements.txt
 - **AT-UKanNet 实现**: `nets/archs_ukan_pfan.py` 中的 `AT_UKanNet` 类  
   - 兼容别名：`UKAN_PFAN = AT_UKanNet`（为了不破坏旧脚本）
 - **ATConv 卷积模块**: `nets/ATConv.py` 中的 `ATConv2d`
-- **并行 CASA 注意力模块**: `nets/attention_variants.py`
+- **PCSA 模块**: `nets/attention_variants.py`
   - `ParallelCASABlock`（核心模块）
   - 工厂函数 `create_attention_block(variant='parallel', ...)`
 
@@ -129,9 +128,8 @@ python predict_ukan_atconv_pfan.py \
 
 ## 📝 备注与历史说明
 
-- **AT-UKanNet** 是本项目最终推荐的模型，基于 UKAN 主干 + ATConv + 并行 CASA。
-- **PFAN 注意力 / ARConv**：已在项目中做过尝试，但效果不及 AT-UKanNet 的设计，
-  因此仅作为历史对比选项保留在代码与配置中。
+- **AT-UKanNet** 是本项目最终推荐的模型，基于 UKAN 主干 + ATConv + PCSA。
+
 
 
 
