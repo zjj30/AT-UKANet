@@ -1,21 +1,46 @@
-## AT-UKanNet: UKAN + ATConv + 并行 CASA
+# AT-UKANet
 
-### 🔍 项目目标
+[中文说明](README_ZH.md)
 
-本项目最终提出的主模型为 **AT-UKanNet**，用于医学图像分割等场景，通过在 UKAN 主干上引入
-**ATConv** 与 **PCSA**，增强全局上下文建模能力。
+Official code repository for **“AT-UKANet: An Enhanced U-KAN Architecture with Attentive Convolution for Medical Image Segmentation.”**
 
-- **主干网络**: UKAN
-- **注意力卷积模型 (ATConv)**: 在编码器/解码器部分层替换标准卷积，提升非线性表达和上下文建模能力
-- **并行通道与空间注意力模块 (PCSA)**: 基于 CBAM 思路实现的通道注意力 + 空间注意力，其中推荐方案为 **PCSA**
-- **可选损失增强**: 保留 PFAN 风格边界保持损失（Edge Preservation Loss）作为历史对比实验，默认关闭
+## Important revision note
 
+The architecture was updated during peer review. In the final manuscript:
 
----
+- ATConv is used at encoder stages 2 and 3 and the first decoder block;
+- dynamic kernels use hybrid global and dilation-2 local context;
+- ATConv contains an ungated static 3×3 pathway and a gated dynamic pathway;
+- the local-context and dynamic-residual gates are zero-initialized; and
+- **Parallel Channel–Spatial Attention (PCSA) is not part of the final model.**
 
-## ⚙️ 环境准备
+PCSA, channel attention, spatial attention, and the optional edge loss are retained in this repository only as historical or ablation interfaces. Older source comments and compatibility names may still refer to those exploratory configurations; they must not be interpreted as the final paper architecture.
 
-推荐使用 Conda 新建独立环境，并通过 `requirements.txt` 安装依赖：
+## Final configuration versus legacy interfaces
+
+| Component | Status in the final manuscript |
+|---|---|
+| ATConv at encoder stages 2–3 | Enabled |
+| Channel-matched ATConv at the first decoder block | Enabled |
+| Hybrid global/local context | Enabled |
+| Static 3×3 pathway | Enabled |
+| PCSA / parallel CASA | **Disabled; ablation only** |
+| PFAN-style edge loss | Disabled; historical ablation only |
+
+The original `train_atconv_pfan.py` and `scripts_full_experiment_ukan.sh` files are preserved for compatibility with early experiments. In particular, any legacy example that sets `use_attention=True` and `attention_variant=parallel` describes the earlier PCSA ablation, **not** the final AT-UKANet configuration reported in the revised manuscript.
+
+## Repository contents
+
+- `nets/ATConv.py`: attentive convolution operator.
+- `nets/archs_ukan_pfan.py`: U-KAN/ATConv experimental architecture and compatibility interfaces.
+- `nets/attention_variants.py`: optional attention modules used in ablation experiments.
+- `train_atconv_pfan.py`: legacy training entry point.
+- `predict_ukan_atconv_pfan.py`: prediction and visualization entry point.
+- `data/`, `train/`, and `utils/`: dataset, training, metric, and configuration utilities.
+
+## Environment
+
+Create an isolated Python environment and install the dependencies:
 
 ```bash
 conda create -n ATUKANet python=3.10
@@ -23,113 +48,37 @@ conda activate ATUKANet
 pip install -r requirements.txt
 ```
 
----
+Install a PyTorch build compatible with the CUDA driver on your system.
 
-## 🧱 模型结构概览
+## Evaluation protocol reported in the revised manuscript
 
-- **AT-UKanNet 实现**: `nets/archs_ukan_pfan.py` 中的 `AT_UKanNet` 类  
-  - 兼容别名：`UKAN_PFAN = AT_UKanNet`（为了不破坏旧脚本）
-- **ATConv 卷积模块**: `nets/ATConv.py` 中的 `ATConv2d`
-- **PCSA 模块**: `nets/attention_variants.py`
-  - `ParallelCASABlock`（核心模块）
-  - 工厂函数 `create_attention_block(variant='parallel', ...)`
+The revised paper uses nested five-fold evaluation: each outer test fold is held out from model selection, while checkpoint selection uses an inner validation split from the remaining training data. The reported comparison uses matched splits and strong augmentation for AT-UKANet, U-KAN, and Rolling-UNet-L.
 
-主要控制开关（均在配置 / 命令行参数中暴露）：
+The evaluated data versions contain:
 
-- **+1 `use_atconv`**: 是否在 encoder/decoder 指定层启用 ATConv  
-- **+2 `use_attention` + `attention_variant`**: 是否启用注意力模块（推荐 `parallel` = 并行 CASA）  
-- **+3 `use_hybrid_arch`**: 是否在解码端与注意力做更深层次结构融合（默认 False，仅保留接口）  
-- **+4 `use_edge_loss`**: 是否启用 PFAN 风格 Edge Preservation Loss（默认 False，仅历史对比）  
+| Dataset | Images/pairs |
+|---|---:|
+| CVC-ClinicDB | 612 |
+| BUSI (lesion-only subset) | 647 |
+| GlaS | 165 |
+| BUSI-WHU | 927 |
+| TN3K (harmonized nested split) | 3,493 |
+| BUS-BRA | 1,875 |
+| BUSI-HF (`data-ous` version) | 996 |
 
----
+Datasets are not redistributed by this repository. Please obtain them from their original providers and follow their respective licenses and access conditions.
 
-## 🧪 训练与消融实验
+## Reported scope
 
-### 1. 基本训练脚本（AT-UKanNet）
+The revised manuscript does not claim uniform superiority. Under the matched protocol, Rolling-UNet-L has higher mean IoU on all seven datasets. AT-UKANet has lower reported FLOPs and measured batch-1 latency, but more parameters and peak GPU memory. The result is therefore presented as a workload-specific accuracy–resource trade-off.
 
-主训练入口为根目录下的 `train_atconv_pfan.py`，负责：
+The five outer folds use one training seed per fold. Reliable patient and center identifiers are unavailable for several datasets, including BUSI-HF; the reported image-level intervals should not be interpreted as patient-level or center-level validation.
 
-- 解析配置：`utils/config.py`
-- K 折训练流程：`train/kfold_trainer.py`
-- 模型创建：`nets/model_factory.py`（内部使用 `AT_UKanNet`）
+## Code-release status
 
-示例（单次实验）：
+This `main` branch preserves the original public experimental code while correcting the documentation to match the final manuscript. A consolidated paper-aligned reproduction release will be provided as a separate tagged release after its source, protocol files, and third-party licensing inventory have been sanitized for public distribution.
 
-```bash
-python train_atconv_pfan.py \
-  --datasets bus_bar \
-  --data_dir /path/to/data \
-  --output_dir outputs \
-  --arch AT-UKanNet \
-  --use_atconv True \
-  --atconv_encoder_layers 3 \
-  --atconv_decoder_layers none \
-  --use_attention True \
-  --attention_variant parallel \
-  --use_hybrid_arch False \
-  --use_edge_loss False
-```
+## Citation
 
-### 2. 批量完整实验脚本
-
-`scripts_full_experiment_ukan.sh` 会对多个数据集、随机种子与折数进行批量实验调度：
-
-- 模型名：`MODEL_NAME="AT_UKanNet"`
-- Attention 变体：`ATTENTION_VARIANT`（推荐 `parallel`）
-- K 折：通过 `K_FOLDS` 与 `FOLD_TO_RUN` 控制
-
-在 Linux 环境下运行：
-
-```bash
-bash scripts_full_experiment_ukan.sh
-```
-
----
-
-## 🔎 预测与可视化
-
-- **批量预测**: `predict_ukan_atconv_pfan.py`
-  - 会加载已训练好的 AT-UKanNet 权重（历史目录名中仍可能包含 `UKAN_ATConv_PFAN`）
-  - 支持指定数据集与样本 ID，并保存预测 mask、可视化结果与可选 Grad-CAM
-
-示例：
-
-```bash
-python predict_ukan_atconv_pfan.py \
-  --dataset bus_bra \
-  --model_dir /path/to/exp_dir \
-  --img_ids bus_0001-l,bus_0259-l \
-  --output_dir predicted_masks \
-  --generate_gradcam
-```
-
----
-
-## 📁 主要目录结构（简要）
-
-```text
-.
-├── nets/                 # 模型相关模块
-│   ├── archs_ukan_pfan.py    # AT_UKanNet (主模型，实现 UKAN + ATConv + CASA)
-│   ├── ATConv.py             # ATConv2d 与示例模块
-│   ├── attention_variants.py # CASA/CBAM 注意力变体（并行 CASA 为主）
-│   ├── model_factory.py      # 统一模型工厂（创建 AT-UKanNet）
-│   └── optimizer.py, scheduler.py, kan.py, ...
-├── train/                # 训练流程（k-fold、训练、验证、指标）
-├── data/                 # 数据集加载与 k-fold 划分
-├── utils/                # 配置解析、随机种子、设备等工具
-├── pfan/                 # PFAN 风格损失（历史对比实验用）
-├── train_atconv_pfan.py  # AT-UKanNet 训练主脚本
-├── scripts_full_experiment_ukan.sh  # AT-UKanNet 批量实验脚本
-└── predict_ukan_atconv_pfan.py      # AT-UKanNet 预测与可视化脚本
-```
-
----
-
-## 📝 备注与历史说明
-
-- **AT-UKanNet** 是本项目最终推荐的模型，基于 UKAN 主干 + ATConv + PCSA。
-
-
-
+Citation metadata will be added after the article record is finalized.
 
